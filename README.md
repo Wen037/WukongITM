@@ -1,4 +1,4 @@
-# 🐒 Wukong ITM (悟空脱敏)
+#  Wukong ITM (悟空脱敏)
 
 ![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)
 ![Rust](https://img.shields.io/badge/Core-Rust-orange.svg)
@@ -19,13 +19,14 @@
 
 在除夕夜的狂欢里，巨头们用天价的春晚广告，变出了一个名为"完全免费"的 AI 盛世。
 
-就像《西游记》里白骨精化作村姑送上香喷喷的斋饭，普通人因为对技术底层的无知，欣然接受了这份免费的馈赠。
-但作为一个悟空，我能看清楚这些"免费"背后的系统调用与商业逻辑了：他们变作高效的工具、聪明的助手，引诱你输入个人的商业合同、核心代码、家庭信息。
+就像《西游记》里白骨精化作村姑送上香喷喷的斋饭，普通人因为对技术的无知，欣然接受了这份免费的馈赠。
+但作为一个悟空，能看清楚这些"免费"背后的系统调用与商业逻辑：他们变作高效的工具、聪明的助手，引诱你输入个人的商业合同、核心代码、家庭信息。
 最终，在云端的服务器里，你的隐私数据化作了他们闭源模型的养料。
+
 **免费的代价，是你成为了产品本身。**
 
-面对铺天盖地的 AI 营销，各行各业的精英（医生、律师、工程师）就像肉眼凡胎的**唐僧**——他们拥有极高的专业技能，却缺乏在赛博世界保护自己的"魔法"。
-悟空不能普度众生，但尽我所能，为那些愿意保护自己数据主权的人提供一个安全圈。
+面对铺天盖地的 AI 营销，各行各业的精英（医生、律师）就像肉眼凡胎的**唐僧**——他们拥有极高的专业技能，却缺乏在赛博世界保护自己的"魔法"。
+悟空不能普度众生，但愿为那些想保护自己数据主权的人画一个金圈。
 
 ### 🇨🇳 命名：反向劫持的黑客
 
@@ -34,7 +35,9 @@
 本软件的使命与悟空的侠义精神如出一辙：在你的本地电脑上画一个绝对安全的结界，把个人数据拦在圈内。
 
 **ITM (In-The-Middle):**
-在黑客技术中，MITM（Man-in-the-Middle，中间人攻击）是一种恶名昭著的流量窃听手段。而我们反其道而行之，利用这项黑客技术创造正向价值。现在，这个 "Man" 是悟空，
+在黑客技术中，MITM（Man-in-the-Middle，中间人攻击）是恶的流量窃听手段。我们反其道而行之，利用这项黑客技术创造正向价值。
+
+现在，这中间人是悟空，
 它作为你本地专属的守护者，坐在你的电脑与互联网之间，反向劫持并保护你的数据。
 
 ---
@@ -59,21 +62,21 @@ MITM (Man-in-the-Middle) is a notorious hacker technique for intercepting networ
 
 | | 中文 | English |
 |---|---|---|
-| 👁️ **火眼金睛** | 解析 PDF · DOCX · XLSX · TXT，精准提取敏感实体 | Parse PDF, DOCX, XLSX, TXT with accurate entity extraction |
-| 🎭 **七十二变** | 确定性脱敏（`张三` → `[姓名_01]`），保留逻辑拓扑 | Deterministic masking (`Jane Doe` → `[Name_01]`), context preserved |
-| 👤 **角色切换** | 按职业角色切换检测规则（通用 / 律师 / 工程师） | Role-based detection profiles (General / Lawyer / Engineer) |
-| ⭕ **画地为牢** | *开发中*：本地 HTTPS MitM 代理，实时拦截发往 AI 的请求 | *In progress*: Local HTTPS MitM proxy, real-time interception |
-| 💾 **跨会话记忆** | Mapping 自动持久化，导入新文件时自动预填已知词条 | Mappings persist across sessions and auto-fill on new documents |
-| 🌐 **双语界面** | 中英文一键切换，别名库同步切换 | One-click Chinese / English UI with localised alias pools |
-| 🧱 **极致轻量** | Tauri 2.0 + Rust，安装包 ~15 MB，零遥测，可离线运行 | Tauri 2.0 + Rust, ~15 MB installer, zero telemetry, fully offline |
+| **火眼金睛** | 解析 PDF · DOCX · XLSX · TXT，精准提取敏感实体 | Parse PDF, DOCX, XLSX, TXT with accurate entity extraction |
+| **七十二变** | 确定性脱敏（`张三` → `[姓名_01]`），保留逻辑拓扑 | Deterministic masking (`Jane Doe` → `[Name_01]`), context preserved |
+| **角色切换** | 按职业角色切换检测规则（通用 / 律师 / 工程师） | Role-based detection profiles (General / Lawyer / Engineer) |
+| **画地为牢** | *开发中*：本地 HTTPS MitM 代理，实时拦截发往 AI 的请求 | *In progress*: Local HTTPS MitM proxy, real-time interception |
+| **跨会话记忆** | Mapping 自动持久化，导入新文件时自动预填已知词条 | Mappings persist across sessions and auto-fill on new documents |
+| **双语界面** | 中英文一键切换，别名库同步切换 | One-click Chinese / English UI with localised alias pools |
+| **极致轻量** | Tauri 2.0 + Rust，安装包 ~15 MB，零遥测，可离线运行 | Tauri 2.0 + Rust, ~15 MB installer, zero telemetry, fully offline |
 
 ### 检测角色 · Detection Profiles
 
 | 角色 / Role | 识别内容 / Detects |
 |---|---|
-| 🌐 通用 General | 邮箱、手机、身份证、公司名 · Email, phone, national ID, company name |
-| ⚖️ 律师 Lawyer | 上述 + 案号、银行账号、法院名、大额金额 · Above + case numbers, bank accounts, court names, monetary amounts |
-| 💻 工程师 Engineer | IP、主机名、文件路径、API Key、数据库名、Git Remote · IP, hostname, file paths, API keys, DB names, git remotes |
+| 通用 General | 邮箱、手机、身份证、公司名 · Email, phone, national ID, company name |
+| 律师 Lawyer | 上述 + 案号、银行账号、法院名、大额金额 · Above + case numbers, bank accounts, court names, monetary amounts |
+| 工程师 Engineer | IP、主机名、文件路径、API Key、数据库名、Git Remote · IP, hostname, file paths, API keys, DB names, git remotes |
 
 ---
 
