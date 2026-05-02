@@ -1,0 +1,56 @@
+[package]
+name = "wukong-itm"
+version = "0.1.0"
+edition = "2021"
+description = "WukongITM — Local privacy de-identification & MitM proxy"
+authors = []
+license = ""
+repository = ""
+default-run = "wukong-itm"
+
+[lib]
+name = "wukong_itm_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "wukong-itm"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+# Phase 2 – file parsing
+zip = "2"
+quick-xml = "0.37"
+calamine = { version = "0.24", features = ["dates"] }
+lopdf = "0.36"
+tauri-plugin-dialog = "2"
+
+# Phase 3 – HTTPS proxy (uncomment when implementing)
+# hyper = { version = "1", features = ["full"] }
+# hyper-util = { version = "0.1", features = ["full"] }
+# tokio-rustls = "0.26"
+# rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+# rustls-native-certs = "0.8"
+# rcgen = { version = "0.13", features = ["pem"] }
+# lru = "0.12"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
