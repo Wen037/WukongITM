@@ -5,6 +5,10 @@
 ![Tauri](https://img.shields.io/badge/Framework-Tauri_2.0-yellow.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows-informational.svg)
 
+<p align="center">
+  <img src="WukongITM_icon.png" alt="WukongITM" width="160" />
+</p>
+
 > *一款基于"最坏情况防御原则"的本地隐私保护盾。在你的数据被喂给云端 AI 之前，为其戴上隐形面具。*
 
 🌍 **Read this in other languages:** [English](#-origin--philosophy)
