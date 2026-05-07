@@ -10,6 +10,7 @@ pub fn run() {
             commands::save_mappings,
             commands::parse_file,
             commands::export_file,
+            commands::open_folder,
             commands::start_proxy,
             commands::stop_proxy,
             commands::get_proxy_status,

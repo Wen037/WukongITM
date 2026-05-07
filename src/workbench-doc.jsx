@@ -221,7 +221,7 @@ function SelectionBubble({ selection, onPick, onClose, lang }) {
 }
 
 // === Document renderer with token marking ===
-function DocumentView({ doc, entities, onAddEntity, onRemoveEntity, mode, candidates, onAcceptCandidate, onRejectCandidate, previewOriginal, sidebarSelectedEntityId, onReset, lang }) {
+function DocumentView({ doc, entities, onAddEntity, onRemoveEntity, mode, candidates, onAcceptCandidate, onRejectCandidate, onReviewCandidates, previewOriginal, sidebarSelectedEntityId, onReset, lang }) {
   const scrollRef = useRef(null);
   const pageRef = useRef(null);
   const [bubble, setBubble] = useState(null);
@@ -326,7 +326,17 @@ function DocumentView({ doc, entities, onAddEntity, onRemoveEntity, mode, candid
           <Icon name={mode === "auto-confirm" ? "scan" : mode === "direct" ? "wand" : "shield"} size={12} />
           {modeStr[mode] || mode}
         </span>
-        <span style={{ flex: 1 }} />
+        {candidates.length > 0 ? (
+          <button
+            className="subbar-confirm-btn"
+            onClick={onReviewCandidates}
+          >
+            <Icon name="check" size={12} stroke={1.8} />
+            {lang === "en"
+              ? `Confirm ${candidates.length} candidate${candidates.length === 1 ? "" : "s"}`
+              : `确认 ${candidates.length} 项候选`}
+          </button>
+        ) : <span style={{ flex: 1 }} />}
         <span style={{ fontSize: 11, color: "var(--ink-4)" }}>
           {lang === "en"
             ? <><strong style={{ color: "var(--ink-2)", fontFamily: "var(--font-mono)" }}>{entities.length}</strong> marked · double-click to remove</>

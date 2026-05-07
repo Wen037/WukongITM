@@ -14,7 +14,7 @@ const AI_SERVICES = [
   { id: "copilot",  name: "Copilot",   url: "copilot.microsoft.com", color: "#0078D4", letter: "M", desc: "Microsoft" },
 ];
 
-function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled }) {
+function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled, lang = "zh" }) {
   const [enabled, setEnabled] = [proxyEnabled || {}, (fn) => setProxyEnabled(s => typeof fn === "function" ? fn(s) : fn)];
   const [confirmFor, setConfirmFor] = useSP(null);
   const [customs, setCustoms] = useSP([]);
@@ -56,26 +56,32 @@ function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled }) {
     <div className="proxy-tab">
       <div className="proxy-head">
         <div>
-          <h1>AI 接入</h1>
-          <p>本地代理拦截发往 AI 的请求，自动应用脱敏库替换敏感词，收到响应后还原占位符。开启前会让你审一次。</p>
+          <h1>{lang === "en" ? "AI Connect" : "AI 接入"}</h1>
+          <p>{lang === "en"
+            ? "Local proxy intercepts requests to AI services, auto-applies the redaction library to replace sensitive words, and restores placeholders on response. You will review once before enabling."
+            : "本地代理拦截发往 AI 的请求，自动应用脱敏库替换敏感词，收到响应后还原占位符。开启前会让你审一次。"}</p>
         </div>
         <div className="proxy-status">
           <div className="status-pill">
             <span className={`status-dot ${onCount > 0 ? "on" : ""}`} />
-            <span>{onCount > 0 ? `${onCount} 个代理运行中` : "代理未启动"}</span>
+            <span>{onCount > 0
+              ? (lang === "en" ? `${onCount} proxy running` : `${onCount} 个代理运行中`)
+              : (lang === "en" ? "Proxy stopped" : "代理未启动")}</span>
           </div>
           <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 4 }}>
-            <Icon name="lock" size={10} /> 流量仅在本机经过 · 端口 127.0.0.1:7891
+            <Icon name="lock" size={10} /> {lang === "en" ? "Traffic stays on device · Port 127.0.0.1:7891" : "流量仅在本机经过 · 端口 127.0.0.1:7891"}
           </div>
         </div>
       </div>
 
       <div className="proxy-mapping-state">
         <Icon name="database" size={14} />
-        <span>使用 mapping：</span>
-        <strong>{mappingCount > 0 ? `当前 ${mappingCount} 条脱敏库已启用` : "脱敏库为空，请先在工作台脱敏一份文件"}</strong>
+        <span>{lang === "en" ? "Using mapping:" : "使用 mapping："}</span>
+        <strong>{mappingCount > 0
+          ? (lang === "en" ? `${mappingCount} redaction ${mappingCount === 1 ? "library" : "libraries"} enabled` : `当前 ${mappingCount} 条脱敏库已启用`)
+          : (lang === "en" ? "Library empty — redact a file first" : "脱敏库为空，请先在工作台脱敏一份文件")}</strong>
         <span style={{ flex: 1 }} />
-        <button className="btn sm ghost">管理 mapping</button>
+        <button className="btn sm ghost">{lang === "en" ? "Manage Mapping" : "管理 mapping"}</button>
       </div>
 
       <div className="proxy-grid">
@@ -87,7 +93,7 @@ function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled }) {
                 <div className="ai-name">{s.name}</div>
                 <div className="ai-url">{s.url}</div>
               </div>
-              <label className="switch" title={enabled[s.id] ? "停用" : "开启"}>
+              <label className="switch" title={enabled[s.id] ? (lang === "en" ? "Disable" : "停用") : (lang === "en" ? "Enable" : "开启")}>
                 <input
                   type="checkbox"
                   checked={!!enabled[s.id]}
@@ -102,7 +108,7 @@ function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled }) {
               {enabled[s.id] && (
                 <span className="ai-stat">
                   <span className="live-dot" />
-                  代理中
+                  {lang === "en" ? "Proxying" : "代理中"}
                 </span>
               )}
               {s.id.startsWith("custom_") && (
@@ -120,11 +126,11 @@ function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled }) {
               <Icon name="plus" size={16} />
             </div>
             <div className="ai-info" style={{ flex: 1 }}>
-              <div className="ai-name" style={{ color: "var(--ink-2)" }}>添加自定义 AI</div>
+              <div className="ai-name" style={{ color: "var(--ink-2)" }}>{lang === "en" ? "Add Custom AI" : "添加自定义 AI"}</div>
               <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
                 <input
                   className="custom-input"
-                  placeholder="例如 你的内网AI网址.com"
+                  placeholder={lang === "en" ? "e.g. your-internal-ai.com" : "例如 你的内网AI网址.com"}
                   value={customInput}
                   onChange={e => setCustomInput(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && addCustom()}
@@ -142,13 +148,13 @@ function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled }) {
         <div className="modal-backdrop" onClick={() => setConfirmFor(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>开启 {confirmService.name} 代理前请确认 mapping</h3>
-              <p>以下 {mappingCount} 条 mapping 将被用于替换发出去的敏感词。</p>
+              <h3>{lang === "en" ? `Confirm mapping before enabling ${confirmService.name}` : `开启 ${confirmService.name} 代理前请确认 mapping`}</h3>
+              <p>{lang === "en" ? `The following ${mappingCount} ${mappingCount === 1 ? "mapping" : "mappings"} will replace sensitive words in outgoing requests.` : `以下 ${mappingCount} 条 mapping 将被用于替换发出去的敏感词。`}</p>
             </div>
             <div className="modal-body">
               {mappingCount === 0 ? (
                 <div style={{ textAlign: "center", padding: 24, color: "var(--ink-3)" }}>
-                  尚未生成 mapping。请先在工作台脱敏一份文件。
+                  {lang === "en" ? "No mappings yet. Redact a file in the Workbench first." : "尚未生成 mapping。请先在工作台脱敏一份文件。"}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -160,7 +166,7 @@ function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled }) {
                     }}>
                       <div>
                         <div style={{ fontWeight: 500, fontSize: 13 }}>{m.name}</div>
-                        <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{m.entries.length} 条词条 · {m.source}</div>
+                        <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{m.entries.length} {lang === "en" ? "entries" : "条词条"} · {m.source}</div>
                       </div>
                       <input type="checkbox" defaultChecked style={{ accentColor: "var(--accent)" }} />
                     </div>
@@ -170,11 +176,11 @@ function ProxyTab({ globalMappings, proxyEnabled, setProxyEnabled }) {
             </div>
             <div className="modal-foot">
               <div style={{ flex: 1, fontSize: 11, color: "var(--ink-3)", display: "flex", alignItems: "center", gap: 6 }}>
-                <Icon name="alert" size={11} /> 代理启动后会修改系统代理设置
+                <Icon name="alert" size={11} /> {lang === "en" ? "Enabling proxy will modify system proxy settings" : "代理启动后会修改系统代理设置"}
               </div>
-              <button className="btn" onClick={() => setConfirmFor(null)}>取消</button>
+              <button className="btn" onClick={() => setConfirmFor(null)}>{lang === "en" ? "Cancel" : "取消"}</button>
               <button className="btn accent" onClick={confirmEnable} disabled={mappingCount === 0}>
-                <Icon name="check" size={13} /> 确认开启
+                <Icon name="check" size={13} /> {lang === "en" ? "Enable" : "确认开启"}
               </button>
             </div>
           </div>
@@ -202,7 +208,7 @@ function PlaceholderTab({ icon, title, desc, items }) {
   );
 }
 
-function MappingTab({ globalMappings, setGlobalMappings, toast }) {
+function MappingTab({ globalMappings, setGlobalMappings, toast, lang = "zh" }) {
   const [expandedId, setExpandedId] = useSP(null);
   const [editingMapId, setEditingMapId] = useSP(null);
   const [editingMapName, setEditingMapName] = useSP("");
@@ -215,7 +221,7 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
   function deleteMapping(id) {
     setGlobalMappings(s => s.filter(m => m.id !== id));
     setConfirmDelete(null);
-    toast("已删除 mapping", "ok");
+    toast(lang === "en" ? "Mapping deleted" : "已删除 mapping", "ok");
   }
   function startEditName(m) { setEditingMapId(m.id); setEditingMapName(m.name); }
   function saveEditName() {
@@ -228,15 +234,16 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
 
   function addManual() {
     const id = `m_${Date.now()}`;
+    const name = lang === "en" ? `Manual Library ${globalMappings.length + 1}` : `手动脱敏库 ${globalMappings.length + 1}`;
     setGlobalMappings(s => [...s, {
-      id, name: `手动脱敏库 ${s.length + 1}`,
+      id, name,
       entries: [], createdAt: new Date().toISOString(),
-      source: "手动添加", enabled: true,
+      source: lang === "en" ? "manual" : "手动添加", enabled: true,
     }]);
     setExpandedId(id);
     setEditingMapId(id);
-    setEditingMapName(`手动脱敏库 ${globalMappings.length + 1}`);
-    toast("已新建空脱敏库，可在下方添加词条", "ok");
+    setEditingMapName(name);
+    toast(lang === "en" ? "New empty library created — add entries below" : "已新建空脱敏库，可在下方添加词条", "ok");
   }
 
   function scanFile() {
@@ -257,10 +264,10 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
       setGlobalMappings(s => [...s, {
         id, name: file.name.replace(/\.[^.]+$/, ""),
         entries, createdAt: new Date().toISOString(),
-        source: `扫描自 ${file.name}`, enabled: true,
+        source: lang === "en" ? `Scanned from ${file.name}` : `扫描自 ${file.name}`, enabled: true,
       }]);
       setExpandedId(id);
-      toast(`扫描完成 · ${entries.length} 个词条已加入 mapping`, "ok");
+      toast(lang === "en" ? `Scan complete · ${entries.length} entries added` : `扫描完成 · ${entries.length} 个词条已加入 mapping`, "ok");
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -270,15 +277,18 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
     <div className="mapping-tab">
       <div className="mapping-tab-head">
         <div>
-          <h2><Icon name="database" size={18} /> 脱敏库</h2>
-          <p>共 <strong>{globalMappings.length}</strong> 个脱敏库 · 启用 <strong>{globalMappings.filter(m => m.enabled).length}</strong> · 已启用的脱敏库会在本地拦截请求时自动应用</p>
+          <h2><Icon name="database" size={18} /> {lang === "en" ? "Redaction Library" : "脱敏库"}</h2>
+          <p>{lang === "en"
+            ? <>Total <strong>{globalMappings.length}</strong> {globalMappings.length === 1 ? "library" : "libraries"} · Enabled <strong>{globalMappings.filter(m => m.enabled).length}</strong> · Enabled libraries are auto-applied when intercepting requests</>
+            : <>共 <strong>{globalMappings.length}</strong> 个脱敏库 · 启用 <strong>{globalMappings.filter(m => m.enabled).length}</strong> · 已启用的脱敏库会在本地拦截请求时自动应用</>
+          }</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn" onClick={scanFile}>
-            <Icon name="scan" size={13} /> 扫描文件添加
+            <Icon name="scan" size={13} /> {lang === "en" ? "Scan & Add" : "扫描文件添加"}
           </button>
           <button className="btn accent" onClick={addManual}>
-            <Icon name="plus" size={13} /> 手动添加
+            <Icon name="plus" size={13} /> {lang === "en" ? "Add Manual" : "手动添加"}
           </button>
           <input ref={fileInputRef} type="file" accept=".txt,.md,.csv" style={{ display: "none" }} onChange={handleFile} />
         </div>
@@ -288,8 +298,11 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
         <div className="mapping-empty">
           <div className="mapping-empty-card">
             <div className="empty-icon"><Icon name="database" size={28} /></div>
-            <h3>脱敏库为空</h3>
-            <p>到工作台脱敏一份文档并保存，或直接 <button className="link" onClick={addManual}>手动添加</button> / <button className="link" onClick={scanFile}>扫描文件</button>。</p>
+            <h3>{lang === "en" ? "Library Empty" : "脱敏库为空"}</h3>
+            <p>{lang === "en"
+              ? <><button className="link" onClick={addManual}>Add manually</button> or <button className="link" onClick={scanFile}>scan a file</button>, or redact a document in the Workbench and save it.</>
+              : <>到工作台脱敏一份文档并保存，或直接 <button className="link" onClick={addManual}>手动添加</button> / <button className="link" onClick={scanFile}>扫描文件</button>。</>
+            }</p>
           </div>
         </div>
       ) : (
@@ -325,7 +338,7 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
                       <div className="map-name" onDoubleClick={() => startEditName(m)}>{m.name}</div>
                     )}
                     <div className="map-meta">
-                      <span>{m.entries.length} 个词条</span>
+                      <span>{m.entries.length} {lang === "en" ? "entries" : "个词条"}</span>
                       <span className="dot" />
                       <span>{m.source}</span>
                       <span className="dot" />
@@ -335,26 +348,28 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
                   <div className="map-type-pills">
                     {window.TYPES.filter(t => typeCount[t.id]).map(t => (
                       <span key={t.id} className="type-pill" style={{ background: t.color, color: t.ink }}>
-                        {t.label} {typeCount[t.id]}
+                        {lang === "en" ? (t.en || t.label) : t.label} {typeCount[t.id]}
                       </span>
                     ))}
                     {typeCount.other && (
-                      <span className="type-pill" style={{ background: "var(--type-other)" }}>其他 {typeCount.other}</span>
+                      <span className="type-pill" style={{ background: "var(--type-other)" }}>{lang === "en" ? "Other" : "其他"} {typeCount.other}</span>
                     )}
                   </div>
                   <div className="map-actions">
                     <button
                       className={`apply-toggle ${m.enabled ? "on" : "off"}`}
                       onClick={() => toggleEnabled(m.id)}
-                      title={m.enabled ? "已启用 · 点击停用" : "已停用 · 点击启用"}
+                      title={m.enabled
+                        ? (lang === "en" ? "Enabled · click to disable" : "已启用 · 点击停用")
+                        : (lang === "en" ? "Disabled · click to enable" : "已停用 · 点击启用")}
                     >
                       <span className="apply-dot" />
-                      {m.enabled ? "启用" : "停用"}
+                      {m.enabled ? (lang === "en" ? "Enabled" : "启用") : (lang === "en" ? "Disabled" : "停用")}
                     </button>
-                    <button className="icon-btn" onClick={() => startEditName(m)} title="重命名">
+                    <button className="icon-btn" onClick={() => startEditName(m)} title={lang === "en" ? "Rename" : "重命名"}>
                       <Icon name="edit" size={13} />
                     </button>
-                    <button className="icon-btn danger" onClick={() => setConfirmDelete(m.id)} title="删除 mapping">
+                    <button className="icon-btn danger" onClick={() => setConfirmDelete(m.id)} title={lang === "en" ? "Delete mapping" : "删除 mapping"}>
                       <Icon name="trash" size={13} />
                     </button>
                   </div>
@@ -363,7 +378,7 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
                 {isOpen && (
                   <div className="map-card-body">
                     {m.entries.length === 0 ? (
-                      <div className="map-empty-entries">这个 mapping 还没有词条。在下方添加 ↓</div>
+                      <div className="map-empty-entries">{lang === "en" ? "This mapping has no entries yet. Add one below ↓" : "这个 mapping 还没有词条。在下方添加 ↓"}</div>
                     ) : (
                       <div className="map-entries">
                         {m.entries.map((ent, i) => {
@@ -375,9 +390,9 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
                               <span className="entry-text" style={{ background: t.color, color: t.ink }}>{ent.text}</span>
                               <span className="entry-arrow">→</span>
                               <span className="entry-placeholder">{placeholder}</span>
-                              <span className="entry-type">{t.label}</span>
+                              <span className="entry-type">{lang === "en" ? (t.en || t.label) : t.label}</span>
                               <span style={{ flex: 1 }} />
-                              <button className="icon-btn danger" onClick={() => deleteEntry(m.id, ent.id)} title="移除词条">
+                              <button className="icon-btn danger" onClick={() => deleteEntry(m.id, ent.id)} title={lang === "en" ? "Remove entry" : "移除词条"}>
                                 <Icon name="x" size={11} />
                               </button>
                             </div>
@@ -386,6 +401,7 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
                       </div>
                     )}
                     <AddEntriesForm
+                      lang={lang}
                       mapId={m.id}
                       onAdd={(rows) => {
                         setGlobalMappings(s => s.map(mm => mm.id === m.id ? {
@@ -396,7 +412,7 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
                             type: r.type,
                           }))],
                         } : mm));
-                        toast(`已添加 ${rows.length} 个词条`, "ok");
+                        toast(lang === "en" ? `Added ${rows.length} ${rows.length === 1 ? "entry" : "entries"}` : `已添加 ${rows.length} 个词条`, "ok");
                       }}
                     />
                   </div>
@@ -411,13 +427,13 @@ function MappingTab({ globalMappings, setGlobalMappings, toast }) {
         <div className="modal-backdrop" onClick={() => setConfirmDelete(null)}>
           <div className="modal" style={{ width: 400 }} onClick={e => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>确认删除？</h3>
-              <p>该 mapping 及其所有词条将被永久移除，无法恢复。</p>
+              <h3>{lang === "en" ? "Confirm Delete?" : "确认删除？"}</h3>
+              <p>{lang === "en" ? "This mapping and all its entries will be permanently removed and cannot be recovered." : "该 mapping 及其所有词条将被永久移除，无法恢复。"}</p>
             </div>
             <div style={{ padding: "16px 22px", display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button className="btn" onClick={() => setConfirmDelete(null)}>取消</button>
+              <button className="btn" onClick={() => setConfirmDelete(null)}>{lang === "en" ? "Cancel" : "取消"}</button>
               <button className="btn danger" onClick={() => deleteMapping(confirmDelete)}>
-                <Icon name="trash" size={12} /> 确认删除
+                <Icon name="trash" size={12} /> {lang === "en" ? "Confirm Delete" : "确认删除"}
               </button>
             </div>
           </div>
@@ -593,12 +609,12 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
                         <path d="M4 2l4 4-4 4" stroke="currentColor" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                       <span className="rule-set-name">{set.name}</span>
-                      <span className="rule-set-count">{set.entries.length} 条</span>
+                      <span className="rule-set-count">{set.entries.length} {lang === "en" ? "entries" : "条"}</span>
                       <button
                         className="icon-btn danger"
                         style={{ marginLeft: 4 }}
                         onClick={e => { e.stopPropagation(); deleteSet(set.id); }}
-                        title="删除此库"
+                        title={lang === "en" ? "Delete this set" : "删除此库"}
                       ><Icon name="trash" size={12} /></button>
                     </div>
                     {isOpen && (
@@ -611,7 +627,7 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
                               const isEditing = editEntry?.setId === set.id && editEntry?.entryId === entry.id;
                               return (
                                 <div key={entry.id} className="global-rule-row">
-                                  <span className="rule-type-badge" style={{ background: tp.color, color: tp.ink }}>{tp.label}</span>
+                                  <span className="rule-type-badge" style={{ background: tp.color, color: tp.ink }}>{lang === "en" ? (tp.en || tp.label) : tp.label}</span>
                                   <span className="rule-original">{entry.text}</span>
                                   <span className="rule-arrow">→</span>
                                   {isEditing ? (
@@ -619,22 +635,22 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
                                       <input
                                         className="rule-alias-input"
                                         value={editEntry.alias}
-                                        placeholder={`空=随机`}
+                                        placeholder={lang === "en" ? "blank = random" : "空=随机"}
                                         onChange={e => setEditEntry(v => ({ ...v, alias: e.target.value }))}
                                         onKeyDown={e => { if (e.key === "Enter") saveEditEntry(); if (e.key === "Escape") setEditEntry(null); }}
                                         autoFocus
                                       />
-                                      <button className="btn sm accent" style={{ padding: "2px 8px" }} onClick={saveEditEntry}>保存</button>
-                                      <button className="btn sm ghost" style={{ padding: "2px 8px" }} onClick={() => setEditEntry(null)}>取消</button>
+                                      <button className="btn sm accent" style={{ padding: "2px 8px" }} onClick={saveEditEntry}>{lang === "en" ? "Save" : "保存"}</button>
+                                      <button className="btn sm ghost" style={{ padding: "2px 8px" }} onClick={() => setEditEntry(null)}>{lang === "en" ? "Cancel" : "取消"}</button>
                                     </>
                                   ) : (
                                     <>
                                       <span className="rule-alias" style={{ opacity: entry.autoAlias ? 0.6 : 1 }}>
                                         {entry.alias}
-                                        {entry.autoAlias && <span style={{ fontSize: 10, marginLeft: 4, color: "var(--ink-4)" }}>自动</span>}
+                                        {entry.autoAlias && <span style={{ fontSize: 10, marginLeft: 4, color: "var(--ink-4)" }}>{lang === "en" ? "auto" : "自动"}</span>}
                                       </span>
-                                      <button className="icon-btn" onClick={() => startEditEntry(set.id, entry)} title="编辑替换词"><Icon name="edit" size={12} /></button>
-                                      <button className="icon-btn danger" onClick={() => deleteEntry(set.id, entry.id)} title="删除"><Icon name="trash" size={12} /></button>
+                                      <button className="icon-btn" onClick={() => startEditEntry(set.id, entry)} title={lang === "en" ? "Edit alias" : "编辑替换词"}><Icon name="edit" size={12} /></button>
+                                      <button className="icon-btn danger" onClick={() => deleteEntry(set.id, entry.id)} title={lang === "en" ? "Delete" : "删除"}><Icon name="trash" size={12} /></button>
                                     </>
                                   )}
                                 </div>
@@ -650,11 +666,11 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
                             className="add-entry-select"
                             style={{ flex: "0 0 auto" }}
                           >
-                            {types.map(tp => <option key={tp.id} value={tp.id}>{tp.label}</option>)}
+                            {types.map(tp => <option key={tp.id} value={tp.id}>{lang === "en" ? (tp.en || tp.label) : tp.label}</option>)}
                           </select>
                           <input
                             className="add-entry-input"
-                            placeholder="原词"
+                            placeholder={lang === "en" ? "Original term" : "原词"}
                             value={form.text || ""}
                             onChange={e => setEntryForms(f => ({ ...f, [set.id]: { ...f[set.id], text: e.target.value } }))}
                             onKeyDown={e => e.key === "Enter" && addEntry(set.id)}
@@ -663,7 +679,7 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
                           <span className="rule-arrow">→</span>
                           <input
                             className="add-entry-input"
-                            placeholder="替换为（空=随机）"
+                            placeholder={lang === "en" ? "Replace with (blank = random)" : "替换为（空=随机）"}
                             value={form.alias || ""}
                             onChange={e => setEntryForms(f => ({ ...f, [set.id]: { ...f[set.id], alias: e.target.value } }))}
                             onKeyDown={e => e.key === "Enter" && addEntry(set.id)}
@@ -716,7 +732,7 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
         {!prefOpen && <p style={{ margin: 0, fontSize: 12, color: "var(--ink-3)" }}>{lang === "en" ? "Dark/light · Font size · Mark mode" : "深色/浅色 · 字体大小 · 标记模式"}</p>}
         {prefOpen && <div className="settings-rows">
           <div className="settings-row">
-            <label className="settings-label">深色模式</label>
+            <label className="settings-label">{lang === "en" ? "Dark mode" : "深色模式"}</label>
             <label className="switch">
               <input
                 type="checkbox"
@@ -725,10 +741,10 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
               />
               <span className="slider" />
             </label>
-            <span className="settings-hint">{tweaks?.darkMode ? "深色" : "浅色"}</span>
+            <span className="settings-hint">{tweaks?.darkMode ? (lang === "en" ? "Dark" : "深色") : (lang === "en" ? "Light" : "浅色")}</span>
           </div>
           <div className="settings-row">
-            <label className="settings-label">字体大小</label>
+            <label className="settings-label">{lang === "en" ? "Font size" : "字体大小"}</label>
             <div className="font-size-row">
               {[12, 13, 14, 15, 16].map(sz => (
                 <button
@@ -743,7 +759,7 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
             <span className="settings-hint">{tweaks?.fontSize || 14}px</span>
           </div>
           <div className="settings-row">
-            <label className="settings-label">候选词默认展开</label>
+            <label className="settings-label">{lang === "en" ? "Show candidates by default" : "候选词默认展开"}</label>
             <label className="switch">
               <input
                 type="checkbox"
@@ -752,18 +768,18 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
               />
               <span className="slider" />
             </label>
-            <span className="settings-hint">导入文档后自动显示候选词栏</span>
+            <span className="settings-hint">{lang === "en" ? "Auto-show candidate panel on file import" : "导入文档后自动显示候选词栏"}</span>
           </div>
           <div className="settings-row">
-            <label className="settings-label">标记模式默认</label>
+            <label className="settings-label">{lang === "en" ? "Default mark mode" : "标记模式默认"}</label>
             <select
               className="settings-select"
               value={tweaks?.selectionMode || "bubble"}
               onChange={e => setTweak("selectionMode", e.target.value)}
             >
-              <option value="bubble">气泡选择类型</option>
-              <option value="direct">直接标记（拖即标）</option>
-              <option value="auto-confirm">自动识别·等待确认</option>
+              <option value="bubble">{lang === "en" ? "Bubble — pick type" : "气泡选择类型"}</option>
+              <option value="direct">{lang === "en" ? "Direct — mark on drag" : "直接标记（拖即标）"}</option>
+              <option value="auto-confirm">{lang === "en" ? "Auto-detect · await confirm" : "自动识别·等待确认"}</option>
             </select>
           </div>
         </div>}
@@ -773,34 +789,34 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
       <section className="settings-section">
         <button className="settings-section-head collapsible" onClick={() => setStoreOpen(v => !v)}>
           <Icon name="save" size={15} />
-          <h3>存储</h3>
+          <h3>{lang === "en" ? "Storage" : "存储"}</h3>
           <span style={{ flex: 1 }} />
           <svg width="12" height="12" viewBox="0 0 12 12" style={{ transform: storeOpen ? "rotate(90deg)" : "none", transition: "transform .15s", flexShrink: 0 }}>
             <path d="M4 2l4 4-4 4" stroke="currentColor" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-        {!storeOpen && <p style={{ margin: 0, fontSize: 12, color: "var(--ink-3)" }}>所有数据仅存储在本机，不会离开你的电脑。</p>}
+        {!storeOpen && <p style={{ margin: 0, fontSize: 12, color: "var(--ink-3)" }}>{lang === "en" ? "All data is stored locally and never leaves your computer." : "所有数据仅存储在本机，不会离开你的电脑。"}</p>}
         {storeOpen && <div className="settings-rows">
           <div className="settings-row">
-            <label className="settings-label">脱敏库文件</label>
+            <label className="settings-label">{lang === "en" ? "Library file" : "脱敏库文件"}</label>
             <span className="settings-path">%APPDATA%\com.wukong.itm\mappings.json</span>
           </div>
           <div className="settings-row">
-            <label className="settings-label">全局规则</label>
-            <span className="settings-path">浏览器 localStorage（本机隔离）</span>
+            <label className="settings-label">{lang === "en" ? "Global rules" : "全局规则"}</label>
+            <span className="settings-path">{lang === "en" ? "Browser localStorage (device-only)" : "浏览器 localStorage（本机隔离）"}</span>
           </div>
           <div className="settings-row">
-            <label className="settings-label">清空脱敏库</label>
+            <label className="settings-label">{lang === "en" ? "Clear library" : "清空脱敏库"}</label>
             <button
               className="btn danger sm"
               onClick={() => {
-                if (window.confirm("确认清空所有脱敏库数据？此操作无法撤销。")) {
+                if (window.confirm(lang === "en" ? "Clear all redaction library data? This cannot be undone." : "确认清空所有脱敏库数据？此操作无法撤销。")) {
                   window.Bridge?.saveMappings([]);
                   window.location.reload();
                 }
               }}
             >
-              <Icon name="trash" size={12} /> 清空
+              <Icon name="trash" size={12} /> {lang === "en" ? "Clear" : "清空"}
             </button>
           </div>
         </div>}
@@ -810,7 +826,7 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
       <section className="settings-section">
         <button className="settings-section-head collapsible" onClick={() => setAboutOpen(v => !v)}>
           <Icon name="info" size={15} />
-          <h3>关于 WukongITM</h3>
+          <h3>{lang === "en" ? "About WukongITM" : "关于 WukongITM"}</h3>
           <span style={{ flex: 1 }} />
           <svg width="12" height="12" viewBox="0 0 12 12" style={{ transform: aboutOpen ? "rotate(90deg)" : "none", transition: "transform .15s", flexShrink: 0 }}>
             <path d="M4 2l4 4-4 4" stroke="currentColor" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -825,12 +841,17 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
             </div>
           </div>
           <div className="about-pledges">
-            {[
+            {(lang === "en" ? [
+              ["lock",     "100% Local",        "All text processing and mapping replacement happens on your device"],
+              ["shield",   "Zero server",       "The app contains no network requests or telemetry code"],
+              ["eye-off",  "No data upload",    "Your files and mappings never leave this machine"],
+              ["database", "Open & auditable",  "Source code is public — compile and verify yourself"],
+            ] : [
               ["lock",     "完全本地运行",     "所有文本处理和 mapping 替换在你的设备上完成"],
               ["shield",   "零服务器",         "程序不包含任何网络请求或遥测代码"],
               ["eye-off",  "无数据上传",        "你的文件和 mapping 永远不会离开本机"],
               ["database", "开源可审计",        "源代码公开，可自行编译验证"],
-            ].map(([icon, title, desc]) => (
+            ]).map(([icon, title, desc]) => (
               <div key={icon} className="pledge-row">
                 <span className="pledge-icon"><Icon name={icon} size={14} /></span>
                 <div>
@@ -848,7 +869,7 @@ function SettingsTab({ tweaks, setTweak, lang = "zh" }) {
 }
 
 // ── AddEntriesForm: inline form to add new entries to a mapping ──────────────
-function AddEntriesForm({ onAdd }) {
+function AddEntriesForm({ onAdd, lang = "zh" }) {
   const [text, setText] = useSP("");
   const [type, setType] = useSP("name");
   const types = window.TYPES || [];
@@ -867,17 +888,17 @@ function AddEntriesForm({ onAdd }) {
         onChange={e => setType(e.target.value)}
         className="add-entry-select"
       >
-        {types.map(tp => <option key={tp.id} value={tp.id}>{tp.label}</option>)}
+        {types.map(tp => <option key={tp.id} value={tp.id}>{lang === "en" ? (tp.en || tp.label) : tp.label}</option>)}
       </select>
       <input
         className="add-entry-input"
-        placeholder="输入词条（回车确认）"
+        placeholder={lang === "en" ? "Enter term (Enter to confirm)" : "输入词条（回车确认）"}
         value={text}
         onChange={e => setText(e.target.value)}
         onKeyDown={e => e.key === "Enter" && submit()}
       />
       <button className="btn sm accent" onClick={submit} disabled={!text.trim()}>
-        <Icon name="plus" size={12} /> 添加
+        <Icon name="plus" size={12} /> {lang === "en" ? "Add" : "添加"}
       </button>
     </div>
   );

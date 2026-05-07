@@ -82,6 +82,7 @@ function App() {
   const [confirmModal, setConfirmModal] = useS(null);
   const [toasts, setToasts] = useS([]);
   const [globalMappings, setGlobalMappings] = useS([]); // accumulated across exports
+  const [exportResult, setExportResult] = useS(null); // { count, filePath, isBrowserDownload, savedFile, savedMapping }
 
   const lang = tweaks.language || "zh";
   const t = STR[lang] || STR.zh;
@@ -202,8 +203,30 @@ function App() {
     setStep(3);
   }
 
-  function doExport() {
+  async function doExport() {
     const count = entities.length;
+    let filePath = null;
+    let isBrowserDownload = false;
+
+    if (exportOpts.exportFile) {
+      const fmt = (doc.filename || "").split(".").pop().toLowerCase() || "txt";
+      try {
+        const result = await window.Bridge.exportFile(doc, entities, fmt);
+        if (result === null || result === undefined) {
+          isBrowserDownload = true; // browser download triggered, no path known
+        } else if (typeof result === "string" && result) {
+          filePath = result;
+        } else if (result && result.path) {
+          filePath = result.path;
+        }
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes("cancelled")) return; // user dismissed dialog — silent
+        toast(lang === "en" ? `Export failed: ${err}` : `导出失败：${err}`, "err");
+        return;
+      }
+    }
+
     if (exportOpts.saveMapping) {
       setGlobalMappings(s => [...s, {
         id: `m_${Date.now()}`,
@@ -214,9 +237,19 @@ function App() {
         enabled: true,
       }]);
     }
+
     setConfirmModal(null);
-    toast(t.exported(count, exportOpts.exportFile, exportOpts.saveMapping), "ok");
-    // reset to step 1 after success
+    setExportResult({
+      count,
+      filePath,
+      isBrowserDownload,
+      savedFile: exportOpts.exportFile,
+      savedMapping: exportOpts.saveMapping,
+    });
+  }
+
+  function finishExport() {
+    setExportResult(null);
     setDoc(null);
     setEntities([]);
     setCandidates([]);
@@ -262,20 +295,6 @@ function App() {
             </button>
           )}
         </div>
-        <button
-          className={`titlebar-qs-btn${!(Object.values(proxyEnabled || {}).some(v => v) && globalMappings.length > 0) ? " dim" : ""}`}
-          onClick={() => {
-            const hasSession = Object.values(proxyEnabled || {}).some(v => v) && globalMappings.length > 0;
-            if (hasSession) {
-              toast(lang === "en" ? "Proxy re-enabled with last settings" : "已用上次设置重新开启脱敏代理", "ok");
-            }
-            setTab("proxy");
-          }}
-          title={lang === "en" ? "Quick-start proxy with last session settings" : "用上次设置一键开启脱敏代理"}
-        >
-          <Icon name="shield-check" size={11} />
-          {lang === "en" ? "Quick Start" : "一键脱敏"}
-        </button>
         <WinControls />
       </div>
 
@@ -313,12 +332,17 @@ function App() {
               <Stepper
                 step={step}
                 onStep={(s) => {
-                  if (s === 1) { /* allow back to import only via reset */ return; }
                   if (s === 2 && doc) setStep(2);
-                  if (s === 3 && doc && entities.length > 0) setStep(3);
                 }}
                 doc={doc}
                 entityCount={entities.length}
+                lang={lang}
+                onQuickStart={() => {
+                  const hasSession = Object.values(proxyEnabled || {}).some(v => v) && globalMappings.length > 0;
+                  if (hasSession) toast(lang === "en" ? "Proxy re-enabled with last settings" : "已用上次设置重新开启脱敏代理", "ok");
+                  setTab("proxy");
+                }}
+                hasSession={Object.values(proxyEnabled || {}).some(v => v) && globalMappings.length > 0}
               />
               <div className="wizard-body">
                 {step === 1 && (
@@ -351,6 +375,7 @@ function App() {
                         onRemoveEntity={removeEntity}
                         onAcceptCandidate={acceptCandidate}
                         onRejectCandidate={rejectCandidate}
+                        onReviewCandidates={() => setConfirmModal({ kind: "candidates" })}
                         mode={tweaks.selectionMode}
                         previewOriginal={previewOriginal}
                         sidebarSelectedEntityId={hoverEntId}
@@ -360,17 +385,17 @@ function App() {
                       />
                     </div>
                     <div className="workbench-fab">
-                      <button className="btn ghost sm" onClick={startAutoDetect} disabled={scanning} title="重新扫描">
-                        <Icon name="scan" size={13} /> 重新扫描
+                      <button className="btn ghost sm" onClick={startAutoDetect} disabled={scanning} title={lang === "en" ? "Re-scan" : "重新扫描"}>
+                        <Icon name="scan" size={13} /> {lang === "en" ? "Re-scan" : "重新扫描"}
                       </button>
                       {entities.length > 0 && (
-                        <button className="btn ghost sm" onClick={() => { setEntities([]); setCandidates([]); toast(t.cleared, "ok"); }} title="清空所有标记">
-                          <Icon name="trash" size={12} /> 清空
+                        <button className="btn ghost sm" onClick={() => { setEntities([]); setCandidates([]); toast(t.cleared, "ok"); }} title={lang === "en" ? "Clear all marks" : "清空所有标记"}>
+                          <Icon name="trash" size={12} /> {lang === "en" ? "Clear" : "清空"}
                         </button>
                       )}
-                      {candidates.length > 0 && (
-                        <button className="btn primary" onClick={() => setConfirmModal({ kind: "candidates" })}>
-                          <Icon name="check" size={13} /> 查看 {candidates.length} 项候选
+                      {entities.length > 0 && (
+                        <button className="btn accent sm fab-preview-btn" onClick={handleExport} title={lang === "en" ? "Preview redacted file & confirm" : "预览脱敏结果并确认"}>
+                          <Icon name="eye" size={13} /> {lang === "en" ? "Preview & Confirm" : "预览并确认"}
                         </button>
                       )}
                     </div>
@@ -378,8 +403,8 @@ function App() {
                       <div className="scan-overlay">
                         <div className="scan-card">
                           <div className="pulse"><Icon name="scan" size={22} /></div>
-                          <h3>正在本地扫描敏感信息</h3>
-                          <p>使用离线规则识别人名、电话、公司、地址等。无网络请求。</p>
+                          <h3>{lang === "en" ? "Scanning locally for sensitive info" : "正在本地扫描敏感信息"}</h3>
+                          <p>{lang === "en" ? "Using offline rules to detect names, phones, companies, addresses, etc. No network requests." : "使用离线规则识别人名、电话、公司、地址等。无网络请求。"}</p>
                           <div className="scan-progress"><div className="bar" /></div>
                         </div>
                       </div>
@@ -413,13 +438,14 @@ function App() {
                     setExportOpts={setExportOpts}
                     onBack={() => setStep(2)}
                     onConfirm={doExport}
+                    lang={lang}
                   />
                 )}
               </div>
             </div>
           )}
-          {tab === "proxy" && <ProxyTab globalMappings={globalMappings} proxyEnabled={proxyEnabled} setProxyEnabled={setProxyEnabled} />}
-          {tab === "mapping" && <MappingTab globalMappings={globalMappings} setGlobalMappings={setGlobalMappings} toast={toast} />}
+          {tab === "proxy" && <ProxyTab globalMappings={globalMappings} proxyEnabled={proxyEnabled} setProxyEnabled={setProxyEnabled} lang={lang} />}
+          {tab === "mapping" && <MappingTab globalMappings={globalMappings} setGlobalMappings={setGlobalMappings} toast={toast} lang={lang} />}
           {tab === "settings" && <SettingsTab tweaks={tweaks} setTweak={setTweak} lang={lang} />}
         </main>
       </div>
@@ -432,6 +458,10 @@ function App() {
           </div>
         ))}
       </div>
+
+      {exportResult && (
+        <ExportSuccessModal result={exportResult} lang={lang} onDone={finishExport} />
+      )}
 
       <TweaksUI tweaks={tweaks} setTweak={setTweak} />
     </div>
@@ -457,15 +487,9 @@ function WinControls() {
   }
   return (
     <div className="win-controls">
-      <button className="win-btn" tabIndex={-1} title="最小化" onClick={() => win()?.minimize()}>
-        <Icon name="minimize" size={11} stroke={1.5} />
-      </button>
-      <button className="win-btn" tabIndex={-1} title={maximized ? "还原" : "最大化"} onClick={toggle}>
-        <Icon name={maximized ? "restore" : "maximize"} size={11} stroke={1.4} />
-      </button>
-      <button className="win-btn close" tabIndex={-1} title="关闭" onClick={() => win()?.close()}>
-        <Icon name="x" size={11} stroke={1.8} />
-      </button>
+      <button className="win-btn win-btn-min" tabIndex={-1} title="最小化" onClick={() => win()?.minimize()} />
+      <button className="win-btn win-btn-max" tabIndex={-1} title={maximized ? "还原" : "最大化"} onClick={toggle} />
+      <button className="win-btn win-btn-close close" tabIndex={-1} title="关闭" onClick={() => win()?.close()} />
     </div>
   );
 }
@@ -538,7 +562,8 @@ function UploadEmpty({ drag, setDrag, onDrop, onPick, onDemo, fileInputRef, onFi
           <button className="link" onClick={onDemo}>{t.upload.demoLink}</button>
         </div>
         <div className="file-types">
-          <span>PDF</span><span>DOCX</span><span>XLSX</span><span>TXT</span><span>MD</span><span>OCR 图片</span>
+          <span>PDF</span><span>DOCX</span><span>XLSX</span><span>TXT</span><span>MD</span>
+          <span>{lang === "en" ? "OCR Image" : "OCR 图片"}</span>
         </div>
         <div className="privacy-banner">
           <span className="dot" />
@@ -613,6 +638,76 @@ function ConfirmModal({ data, exportOpts, doc, onClose, onConfirm }) {
             <Icon name="check" size={13} /> 确认完成
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ExportSuccessModal({ result, lang, onDone }) {
+  const isTauri = typeof window.__TAURI__ !== "undefined";
+  const [copied, setCopied] = useS(false);
+
+  function copy() {
+    if (!result.filePath) return;
+    navigator.clipboard?.writeText(result.filePath).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
+
+  async function showInFolder() {
+    if (!result.filePath) return;
+    const dir = result.filePath.replace(/[/\\][^/\\]+$/, "");
+    await window.Bridge.openFolder(dir);
+  }
+
+  return (
+    <div className="modal-backdrop" style={{ zIndex: 200 }}>
+      <div className="export-success-modal">
+        <div className="export-success-icon">
+          <Icon name="shield-check" size={28} />
+        </div>
+        <h2>{lang === "en" ? "Redaction Complete" : "脱敏完成！"}</h2>
+        <p className="export-success-sub">
+          {lang === "en" ? `${result.count} item${result.count === 1 ? "" : "s"} redacted` : `共 ${result.count} 项已脱敏`}
+          {result.savedMapping && (lang === "en" ? " · Saved to Redaction Library" : " · 已存入 Mapping 库")}
+        </p>
+
+        {result.savedFile && (
+          <div className="export-success-path-box">
+            <div className="export-success-path-label">
+              {lang === "en" ? "Saved to" : "保存位置"}
+            </div>
+            {result.filePath ? (
+              <>
+                <div className="export-success-path-value">{result.filePath}</div>
+                <div className="export-success-path-actions">
+                  <button className="btn sm ghost" onClick={copy}>
+                    <Icon name="copy" size={12} />
+                    {copied ? (lang === "en" ? "Copied!" : "已复制") : (lang === "en" ? "Copy path" : "复制路径")}
+                  </button>
+                  {isTauri && (
+                    <button className="btn sm ghost" onClick={showInFolder}>
+                      <Icon name="folder" size={12} />
+                      {lang === "en" ? "Show in folder" : "在文件夹中显示"}
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="export-success-download">
+                <Icon name="download" size={14} />
+                {lang === "en"
+                  ? "File downloaded to your Downloads folder"
+                  : "已下载到浏览器默认下载文件夹"}
+              </div>
+            )}
+          </div>
+        )}
+
+        <button className="btn accent" onClick={onDone} style={{ marginTop: 20, width: "100%", padding: "10px 0", fontWeight: 600 }}>
+          <Icon name="check" size={14} /> {lang === "en" ? "Done" : "完成"}
+        </button>
       </div>
     </div>
   );
@@ -856,17 +951,19 @@ function CandidatesModal({ candidates, existingEntities, onClose, onConfirm }) {
   );
 }
 
-function Stepper({ step, onStep, doc, entityCount }) {
-  const steps = [
+function Stepper({ step, onStep, doc, entityCount, lang, onQuickStart, hasSession }) {
+  const steps = lang === "en" ? [
+    { n: 1, label: "Import File", sub: doc ? doc.filename : "PDF / Word / Image" },
+    { n: 2, label: "Mark Sensitive Words", sub: entityCount > 0 ? `Marked ${entityCount}` : "Select or auto-detect" },
+  ] : [
     { n: 1, label: "导入文件", sub: doc ? doc.filename : "选择 PDF / Word / 图片" },
     { n: 2, label: "标记敏感词", sub: entityCount > 0 ? `已标记 ${entityCount} 项` : "框选或自动识别" },
-    { n: 3, label: "一键脱敏", sub: "启用上次设置快速开启脱敏" },
   ];
   return (
     <div className="stepper">
       {steps.map((s, i) => {
         const state = step > s.n ? "done" : step === s.n ? "active" : "todo";
-        const clickable = (s.n === 2 && doc) || (s.n === 3 && doc && entityCount > 0) || s.n < step;
+        const clickable = (s.n === 2 && doc) || s.n < step;
         return (
           <React.Fragment key={s.n}>
             <button
@@ -886,12 +983,21 @@ function Stepper({ step, onStep, doc, entityCount }) {
           </React.Fragment>
         );
       })}
+      <span style={{ flex: 1 }} />
+      <button
+        className={`stepper-qs-btn${!hasSession ? " dim" : ""}`}
+        onClick={onQuickStart}
+        title={lang === "en" ? "Quick-start proxy with last session settings" : "用上次设置一键开启脱敏代理"}
+      >
+        <Icon name="shield-check" size={11} />
+        {lang === "en" ? "Quick Start" : "一键脱敏"}
+      </button>
     </div>
   );
 }
 
-function ReviewStep({ doc, entities, exportOpts, setExportOpts, onBack, onConfirm }) {
-  const [showOriginal, setShowOriginal] = useS(false);
+function ReviewStep({ doc, entities, exportOpts, setExportOpts, onBack, onConfirm, lang }) {
+  const [showMapping, setShowMapping] = useS(false);
   const entityIndex = useM(() => {
     const map = {};
     const counters = {};
@@ -941,70 +1047,126 @@ function ReviewStep({ doc, entities, exportOpts, setExportOpts, onBack, onConfir
       const ent = entities.find(e => e.id === p.entId);
       if (!ent) return null;
       const t = TYPE_BY_ID[ent.type] || { prefix: ent.customLabel || "其他", color: "var(--type-other)", ink: "var(--type-other-ink)" };
+      const pfx = ent.customLabel || (lang === "en" ? (t.enPrefix || t.prefix) : t.prefix);
       const idx = entityIndex[ent.id];
-      const placeholder = `[${ent.customLabel || t.prefix}_${String(idx).padStart(2, "0")}]`;
+      const placeholder = `[${pfx}_${String(idx).padStart(2, "0")}]`;
       return (
-        <span
-          key={`${key}_${i}`}
-          className={`tok t-${ent.type || "other"} ${showOriginal ? "marked" : "placeholder"}`}
-          title={`${ent.text} → ${placeholder}`}
-        >
-          {showOriginal ? ent.text : placeholder}
+        <span key={`${key}_${i}`} className={`tok t-${ent.type || "other"} placeholder`} title={`${ent.text} → ${placeholder}`}>
+          {placeholder}
         </span>
       );
     });
   }
 
+  const typeCountBar = TYPES.filter(t => groupCounts[t.id]).map(t => (
+    <span key={t.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 8, fontSize: 11 }}>
+      <span style={{ width: 7, height: 7, borderRadius: 2, background: t.color, display: "inline-block" }} />
+      {lang === "en" ? (t.en || t.label) : t.label} {groupCounts[t.id]}
+    </span>
+  ));
+
   return (
     <div className="review-step v2 no-head">
-      <div className="review-doc-scroll">
-        <div className="doc-page">
-          <div className="doc-meta-bar">
-            <span>共 <strong>{entities.length}</strong> 项替换 ·{" "}
-              {TYPES.filter(t => groupCounts[t.id]).map(t => (
-                <span key={t.id} style={{
-                  display: "inline-flex", alignItems: "center", gap: 4,
-                  marginRight: 8, fontSize: 11,
-                }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 2, background: t.color, display: "inline-block" }} />
-                  {t.label} {groupCounts[t.id]}
-                </span>
-              ))}
-              {groupCounts.other && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 8, fontSize: 11 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--type-other)", display: "inline-block" }} />
-                  其他 {groupCounts.other}
-                </span>
-              )}
-            </span>
-            <button className="btn sm ghost" onClick={() => setShowOriginal(!showOriginal)}>
-              <Icon name={showOriginal ? "eye-off" : "eye"} size={12} />
-              {showOriginal ? "切回脱敏后" : "对比原文"}
-            </button>
+      <div className="review-main">
+        <div className="review-doc-scroll">
+          <div className="doc-page">
+            <div className="doc-meta-bar">
+              <span>
+                {lang === "en" ? <><strong>{entities.length}</strong> replacements · </> : <>共 <strong>{entities.length}</strong> 项替换 · </>}
+                {typeCountBar}
+                {groupCounts.other && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 8, fontSize: 11 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--type-other)", display: "inline-block" }} />
+                    {lang === "en" ? "Other" : "其他"} {groupCounts.other}
+                  </span>
+                )}
+              </span>
+              <button
+                className={`btn sm ghost${showMapping ? " active-map" : ""}`}
+                onClick={() => setShowMapping(s => !s)}
+                title={lang === "en" ? "Toggle mapping panel" : "切换对照表"}
+              >
+                <Icon name={showMapping ? "eye-off" : "eye"} size={12} />
+                {lang === "en" ? "Mapping" : "对照表"}
+              </button>
+            </div>
+            {doc.paragraphs.map((para, i) => {
+              if (para.type === "h2") return <h2 key={i}>{renderTok(para.text, `p${i}`)}</h2>;
+              if (para.type === "h3") return <p key={i} style={{ fontWeight: 600, marginTop: 22, marginBottom: 6 }}>{renderTok(para.text, `p${i}`)}</p>;
+              if (para.type === "meta") return <p key={i} className="doc-meta">{renderTok(para.text, `p${i}`)}</p>;
+              if (para.type === "sig") {
+                return (
+                  <div key={i} className="signature">
+                    <div>
+                      <div style={{ color: "var(--ink-3)", marginBottom: 4 }}>{para.left.label}</div>
+                      <div>{lang === "en" ? "Contact:" : "负责人："}{renderTok(para.left.name, `p${i}_l`)}</div>
+                      <div style={{ color: "var(--ink-3)", marginTop: 8 }}>{para.left.date}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: "var(--ink-3)", marginBottom: 4 }}>{para.right.label}</div>
+                      <div>{lang === "en" ? "Contact:" : "负责人："}{renderTok(para.right.name, `p${i}_r`)}</div>
+                      <div style={{ color: "var(--ink-3)", marginTop: 8 }}>{para.right.date}</div>
+                    </div>
+                  </div>
+                );
+              }
+              return <p key={i} className="clause">{renderTok(para.text, `p${i}`)}</p>;
+            })}
           </div>
-          {doc.paragraphs.map((para, i) => {
-            if (para.type === "h2") return <h2 key={i}>{renderTok(para.text, `p${i}`)}</h2>;
-            if (para.type === "h3") return <p key={i} style={{ fontWeight: 600, marginTop: 22, marginBottom: 6 }}>{renderTok(para.text, `p${i}`)}</p>;
-            if (para.type === "meta") return <p key={i} className="doc-meta">{renderTok(para.text, `p${i}`)}</p>;
-            if (para.type === "sig") {
-              return (
-                <div key={i} className="signature">
-                  <div>
-                    <div style={{ color: "var(--ink-3)", marginBottom: 4 }}>{para.left.label}</div>
-                    <div>负责人：{renderTok(para.left.name, `p${i}_l`)}</div>
-                    <div style={{ color: "var(--ink-3)", marginTop: 8 }}>{para.left.date}</div>
-                  </div>
-                  <div>
-                    <div style={{ color: "var(--ink-3)", marginBottom: 4 }}>{para.right.label}</div>
-                    <div>负责人：{renderTok(para.right.name, `p${i}_r`)}</div>
-                    <div style={{ color: "var(--ink-3)", marginTop: 8 }}>{para.right.date}</div>
-                  </div>
-                </div>
-              );
-            }
-            return <p key={i} className="clause">{renderTok(para.text, `p${i}`)}</p>;
-          })}
         </div>
+
+        {showMapping && (
+          <div className="review-mapping-panel">
+            <div className="review-mapping-head">
+              <span>{lang === "en" ? "Redaction Mapping" : "屏蔽词对照"}</span>
+              <span className="review-mapping-count">{entities.length}</span>
+            </div>
+            <div className="review-mapping-body">
+              {TYPES.filter(t => groupCounts[t.id]).map(type => (
+                <div key={type.id} className="review-mapping-group">
+                  <div className="review-mapping-type-head">
+                    <span className="swatch" style={{ background: type.color }} />
+                    {lang === "en" ? (type.en || type.label) : type.label}
+                    <span className="review-mapping-count">{groupCounts[type.id]}</span>
+                  </div>
+                  {entities.filter(e => e.type === type.id).map(ent => {
+                    const idx = entityIndex[ent.id];
+                    const pfx = ent.customLabel || (lang === "en" ? (type.enPrefix || type.prefix) : type.prefix);
+                    const ph = `[${pfx}_${String(idx).padStart(2, "0")}]`;
+                    return (
+                      <div key={ent.id} className="review-mapping-row">
+                        <span className="review-mapping-orig" style={{ background: type.color, color: type.ink }}>{ent.text}</span>
+                        <span className="review-mapping-arrow">→</span>
+                        <span className="review-mapping-ph">{ph}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              {groupCounts.other > 0 && entities.filter(e => e.type === "other" || !e.type).length > 0 && (
+                <div className="review-mapping-group">
+                  <div className="review-mapping-type-head">
+                    <span className="swatch" style={{ background: "var(--type-other)" }} />
+                    {lang === "en" ? "Other" : "其他"}
+                    <span className="review-mapping-count">{groupCounts.other}</span>
+                  </div>
+                  {entities.filter(e => e.type === "other" || !e.type).map((ent, i) => {
+                    const idx = entityIndex[ent.id];
+                    const pfx = ent.customLabel || (lang === "en" ? "Other" : "其他");
+                    const ph = `[${pfx}_${String(idx).padStart(2, "0")}]`;
+                    return (
+                      <div key={ent.id} className="review-mapping-row">
+                        <span className="review-mapping-orig" style={{ background: "var(--type-other)", color: "var(--type-other-ink)" }}>{ent.text}</span>
+                        <span className="review-mapping-arrow">→</span>
+                        <span className="review-mapping-ph">{ph}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="review-foot">
@@ -1012,20 +1174,28 @@ function ReviewStep({ doc, entities, exportOpts, setExportOpts, onBack, onConfir
           <label style={{ flex: 1 }}>
             <input type="checkbox" checked={exportOpts.exportFile} onChange={e => setExportOpts({ ...exportOpts, exportFile: e.target.checked })} />
             <div>
-              <div className="lbl-title">保存脱敏后文件</div>
-              <div className="lbl-sub">{doc.filename.replace(/(\.[^.]+)?$/, "_脱敏$1")}</div>
+              <div className="lbl-title">{lang === "en" ? "Export redacted file" : "导出脱敏文件"}</div>
+              <div className="lbl-sub">{doc.filename.replace(/(\.[^.]+)?$/, lang === "en" ? "_redacted$1" : "_脱敏$1")}</div>
+              {/\.(pdf|docx|xlsx)$/i.test(doc.filename) && (
+                <div className="lbl-warn">
+                  <Icon name="alert" size={11} />
+                  {lang === "en"
+                    ? "Format preserved by Rust backend · text-only fallback if not supported"
+                    : "格式由 Rust 后端保留 · 不支持时降级为纯文本"}
+                </div>
+              )}
             </div>
           </label>
           <label style={{ flex: 1 }}>
             <input type="checkbox" checked={exportOpts.saveMapping} onChange={e => setExportOpts({ ...exportOpts, saveMapping: e.target.checked })} />
             <div>
-              <div className="lbl-title">保存为 Mapping 供后续复用</div>
-              <div className="lbl-sub">将出现在 Mapping 管理中</div>
+              <div className="lbl-title">{lang === "en" ? "Add to Redaction Library" : "添加到 Mapping"}</div>
+              <div className="lbl-sub">{lang === "en" ? "Reuse in future documents" : "将出现在 Mapping 管理中"}</div>
             </div>
           </label>
         </div>
         <button className="btn accent lg" onClick={onConfirm} disabled={!exportOpts.exportFile && !exportOpts.saveMapping} style={{ alignSelf: "stretch", padding: "0 24px" }}>
-          <Icon name="check" size={14} /> 确认完成
+          <Icon name="check" size={14} /> {lang === "en" ? "Confirm" : "确认完成"}
         </button>
       </div>
     </div>

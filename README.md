@@ -1,4 +1,4 @@
-#  Wukong ITM (悟空脱敏)
+#  Wukong itM (悟空脱敏)
 
 ![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)
 ![Rust](https://img.shields.io/badge/Core-Rust-orange.svg)

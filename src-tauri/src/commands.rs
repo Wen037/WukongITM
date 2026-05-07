@@ -30,6 +30,9 @@ pub struct ParsedDoc {
     pub filename: String,
     pub size: String,
     pub paragraphs: Vec<Paragraph>,
+    // Original file path — used by export_file for format-preserving PDF export
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,11 +99,10 @@ fn parse_text_sync(path: &str, filename: String) -> Result<ParsedDoc, String> {
     let paragraphs = lines_to_paragraphs(
         contents.lines().map(|l| l.to_string()).collect(),
     );
-    Ok(ParsedDoc { filename, size, paragraphs })
+    Ok(ParsedDoc { filename, size, paragraphs, path: Some(path.to_string()) })
 }
 
 // ── DOCX ──────────────────────────────────────────────────────────────────────
-// DOCX is a ZIP archive. We unzip word/document.xml and extract <w:t> text nodes.
 
 fn parse_docx_sync(path: &str, filename: String) -> Result<ParsedDoc, String> {
     use std::io::Read;
@@ -117,7 +119,7 @@ fn parse_docx_sync(path: &str, filename: String) -> Result<ParsedDoc, String> {
         .map_err(|e| format!("读取 document.xml 失败: {e}"))?;
 
     let paragraphs = lines_to_paragraphs(extract_docx_paragraphs(&xml));
-    Ok(ParsedDoc { filename, size: file_size_str(path), paragraphs })
+    Ok(ParsedDoc { filename, size: file_size_str(path), paragraphs, path: Some(path.to_string()) })
 }
 
 fn extract_docx_paragraphs(xml: &str) -> Vec<String> {
@@ -200,6 +202,7 @@ fn parse_xlsx_sync(path: &str, filename: String) -> Result<ParsedDoc, String> {
         filename,
         size: file_size_str(path),
         paragraphs: lines_to_paragraphs(lines),
+        path: Some(path.to_string()),
     })
 }
 
@@ -232,8 +235,73 @@ fn parse_pdf_sync(path: &str, filename: String) -> Result<ParsedDoc, String> {
         filename,
         size: file_size_str(path),
         paragraphs: lines_to_paragraphs(lines),
+        path: Some(path.to_string()),
     })
 }
+
+// ── PDF in-place redaction ────────────────────────────────────────────────────
+// Decompresses all page content streams, does byte-level text replacement,
+// and saves as a new PDF preserving all formatting, images, and structure.
+// Works for ASCII/Latin-1 text (names, phones, emails, IPs) in most PDFs.
+
+fn pdf_replace_bytes(haystack: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
+    if needle.is_empty() { return haystack.to_vec(); }
+    let mut result = Vec::with_capacity(haystack.len() + 64);
+    let mut i = 0;
+    while i + needle.len() <= haystack.len() {
+        if haystack[i..].starts_with(needle) {
+            result.extend_from_slice(replacement);
+            i += needle.len();
+        } else {
+            result.push(haystack[i]);
+            i += 1;
+        }
+    }
+    result.extend_from_slice(&haystack[i..]);
+    result
+}
+
+fn export_pdf_redacted(
+    input_path: &str,
+    output_path: &std::path::Path,
+    replacements: &[(String, String)],
+) -> Result<(), String> {
+    let mut doc = lopdf::Document::load(input_path)
+        .map_err(|e| format!("无法打开 PDF: {e}"))?;
+
+    // Decompress all streams so stream.content holds raw bytes
+    doc.decompress();
+
+    let ids: Vec<lopdf::ObjectId> = doc.objects.keys().cloned().collect();
+    for id in ids {
+        if let Some(lopdf::Object::Stream(ref mut stream)) = doc.objects.get_mut(&id) {
+            // Skip image/font/ICC streams — only process text content streams
+            let subtype = stream.dict.get(b"Subtype").ok().and_then(|v| {
+                if let lopdf::Object::Name(ref bytes) = v {
+                    std::str::from_utf8(bytes).ok().map(|s| s.to_string())
+                } else {
+                    None
+                }
+            });
+            match subtype.as_deref() {
+                Some("Image") | Some("CIDFontType2") | Some("Type1C") |
+                Some("OpenType") | Some("TrueType") | Some("CMap") => continue,
+                _ => {}
+            }
+
+            let mut bytes = stream.content.clone();
+            for (orig, placeholder) in replacements {
+                bytes = pdf_replace_bytes(&bytes, orig.as_bytes(), placeholder.as_bytes());
+            }
+            stream.set_plain_content(bytes);
+        }
+    }
+
+    doc.save(output_path).map_err(|e| format!("保存 PDF 失败: {e}"))?;
+    Ok(())
+}
+
+// ── Text replacement helper ───────────────────────────────────────────────────
 
 /// Replace all case-insensitive occurrences of each `(original, placeholder)` pair in `line`.
 /// Replacements must already be sorted longest-first to avoid partial-match shadowing.
@@ -261,12 +329,14 @@ fn replace_case_insensitive(mut line: String, replacements: &[(String, String)])
     line
 }
 
+// ── File export ───────────────────────────────────────────────────────────────
+
 #[tauri::command]
 pub async fn export_file(
     app: AppHandle,
     doc: Value,
     entities: Vec<Entity>,
-    _format: String,
+    format: String,
 ) -> Result<String, String> {
     let filename = doc["filename"]
         .as_str()
@@ -313,23 +383,79 @@ pub async fn export_file(
         .into_iter()
         .map(|line| replace_case_insensitive(line, &replacements))
         .collect();
+    let content = output.join("\n");
 
     let stem = std::path::Path::new(&filename)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("output");
-    let out_filename = format!("{stem}_redacted.txt");
+    let ext = if format.is_empty() { "txt".to_string() } else { format.to_lowercase() };
+    let out_filename = format!("{stem}_脱敏.{ext}");
 
-    let out_path = app.path()
+    // Show a native save dialog so the user chooses where to save
+    use tauri_plugin_dialog::DialogExt;
+    let default_path = app.path()
         .download_dir()
         .map(|d| d.join(&out_filename))
-        .map_err(|e| e.to_string())?;
+        .unwrap_or_else(|_| std::path::PathBuf::from(&out_filename));
 
-    tokio::fs::write(&out_path, output.join("\n"))
+    let out_filename_clone = out_filename.clone();
+    let save_path = tokio::task::spawn_blocking({
+        let app = app.clone();
+        let ext = ext.clone();
+        move || {
+            app.dialog()
+                .file()
+                .set_file_name(default_path.file_name().and_then(|n| n.to_str()).unwrap_or(&out_filename_clone))
+                .add_filter("Output file", &[ext.as_str()])
+                .add_filter("All files", &["*"])
+                .blocking_save_file()
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let out_path = match save_path {
+        Some(p) => p.into_path().map_err(|e| e.to_string())?,
+        None    => return Err("cancelled".to_string()),
+    };
+
+    // For PDF: copy original and replace text in content streams to preserve formatting
+    let orig_path = doc.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
+    if ext == "pdf" {
+        if let Some(src_path) = orig_path {
+            let reps = replacements.clone();
+            let out = out_path.clone();
+            tokio::task::spawn_blocking(move || export_pdf_redacted(&src_path, &out, &reps))
+                .await
+                .map_err(|e| e.to_string())??;
+            return Ok(out_path.to_string_lossy().to_string());
+        }
+    }
+
+    // Fallback: write plain text (for non-PDF or when original path is unavailable)
+    tokio::fs::write(&out_path, content)
         .await
         .map_err(|e| e.to_string())?;
 
     Ok(out_path.to_string_lossy().to_string())
+}
+
+// ── Open folder in OS file manager ───────────────────────────────────────────
+
+#[tauri::command]
+pub async fn open_folder(path: String) -> Result<(), String> {
+    let result = {
+        #[cfg(target_os = "windows")]
+        { std::process::Command::new("explorer").arg(&path).spawn() }
+        #[cfg(target_os = "macos")]
+        { std::process::Command::new("open").arg(&path).spawn() }
+        #[cfg(target_os = "linux")]
+        { std::process::Command::new("xdg-open").arg(&path).spawn() }
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        { return Ok(()); }
+    };
+    result.map(|_| ()).map_err(|e| format!("打开文件夹失败: {e}"))
 }
 
 // ── Phase 3: Proxy control (stubs — implemented in Phase 3) ──────────────────
@@ -443,5 +569,19 @@ mod tests {
         assert_eq!(doc.paragraphs.len(), 2);
         assert_eq!(doc.paragraphs[0].para_type, "h2");
         assert_eq!(doc.paragraphs[1].para_type, "p");
+    }
+
+    #[test]
+    fn pdf_replace_bytes_basic() {
+        let haystack = b"(John Smith)Tj".to_vec();
+        let result = super::pdf_replace_bytes(&haystack, b"John Smith", b"[Name_01]");
+        assert_eq!(result, b"([Name_01])Tj".to_vec());
+    }
+
+    #[test]
+    fn pdf_replace_bytes_no_match() {
+        let haystack = b"(Hello World)Tj".to_vec();
+        let result = super::pdf_replace_bytes(&haystack, b"XYZ", b"[X_01]");
+        assert_eq!(result, haystack);
     }
 }

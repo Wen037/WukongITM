@@ -34,6 +34,48 @@
     });
   }
 
+  // ── PDF / font ligature normalizer ──────────────────────────────────────
+  // Many PDFs use typographic ligature glyphs. PDF extractors that lack a
+  // font ToUnicode map emit them as U+FFFD (replacement character ◆).
+  // This normalizes the standard Unicode Alphabetic Presentation Forms block
+  // (U+FB00–FB06) and strips stray replacement characters.
+  function normalizePdfText(text) {
+    if (!text) return text;
+    return text
+      .replace(/�/g, '')    // unknown glyph → remove (better than garble)
+      .replace(/ﬀ/g, 'ff')  // ﬀ
+      .replace(/ﬁ/g, 'fi')  // ﬁ
+      .replace(/ﬂ/g, 'fl')  // ﬂ
+      .replace(/ﬃ/g, 'ffi') // ﬃ
+      .replace(/ﬄ/g, 'ffl') // ﬄ
+      .replace(/ﬅ/g, 'ft')  // ﬅ
+      .replace(/ﬆ/g, 'st'); // ﬆ
+  }
+
+  // Merge short orphaned fragments caused by ligature glyph splitting.
+  // e.g. ["Confiden", "ti", "al"] → ["Confidential"]
+  // Only merges if both adjacent paragraphs look like word fragments
+  // (no spaces inside, ends/starts with letters).
+  function mergeFragments(paragraphs) {
+    const out = [];
+    for (const para of paragraphs) {
+      const text = normalizePdfText(para.text || '');
+      if (!text) continue; // drop paragraphs that were only ligature chars
+
+      const prev = out[out.length - 1];
+      const isFragment = (t) => t.length <= 8 && !/\s/.test(t) && /^[a-z]/.test(t);
+      const prevEndsLetter = prev && /[a-zA-Z]$/.test(prev.text);
+
+      if (prev && prevEndsLetter && isFragment(text)) {
+        // Looks like a mid-word continuation — merge into previous
+        out[out.length - 1] = { ...prev, text: prev.text + text };
+      } else {
+        out.push({ ...para, text });
+      }
+    }
+    return out;
+  }
+
   window.Bridge = {
 
     // ── File picker (native OS dialog) ──────────────────────────────────────
@@ -71,7 +113,12 @@
       if (dropPathCache[file.name]) delete dropPathCache[file.name];
 
       if (isTauri && filePath) {
-        return window.__TAURI__.core.invoke('parse_file', { path: filePath });
+        const result = await window.__TAURI__.core.invoke('parse_file', { path: filePath });
+        // Post-process: fix ligature glyphs that the PDF extractor couldn't map
+        if (result && result.paragraphs) {
+          result.paragraphs = mergeFragments(result.paragraphs);
+        }
+        return result;
       }
 
       // Browser fallback — only works for plain text formats
@@ -104,19 +151,81 @@
     },
 
     // ── File export ──────────────────────────────────────────────────────────
+    // Generates redacted plain-text content in JS (substituting entities),
+    // then saves it to a user-chosen path.
+    // - Tauri: shows a native save dialog (suggesting original filename+ext),
+    //          writes via fs plugin → returns the saved path.
+    // - Browser: triggers a browser download → returns null.
+    //
+    // NOTE: For binary formats (PDF, DOCX) the content is plain text inside
+    // the original extension. Full format preservation needs a future Rust
+    // backend update (re-encode the source binary with substitutions applied).
     async exportFile(doc, entities, format) {
-      if (isTauri) {
-        return window.__TAURI__.core.invoke('export_file', { doc, entities, format });
+      // ── Build redacted text content ─────────────────────────────────────
+      const TYPE_MAP = window.TYPE_BY_ID || {};
+      const counters = {}, index = {};
+      for (const ent of entities) {
+        const t = ent.type || 'other';
+        counters[t] = (counters[t] || 0) + 1;
+        index[ent.id] = counters[t];
       }
-      const lines = doc.paragraphs.map((p) => p.text);
-      const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+      const substitute = (text) => {
+        const sorted = [...entities].sort((a, b) => b.text.length - a.text.length);
+        let out = text;
+        for (const ent of sorted) {
+          const td = TYPE_MAP[ent.type] || {};
+          const pfx = ent.customLabel || td.prefix || ent.type || 'other';
+          const ph = `[${pfx}_${String(index[ent.id]).padStart(2, '0')}]`;
+          out = out.split(ent.text).join(ph);
+        }
+        return out;
+      };
+      const content = doc.paragraphs.map((p) => substitute(p.text || '')).join('\n');
+      const ext = (format || 'txt').replace(/^\./, '');
+      const suggestedName = doc.filename.replace(/(\.[^.]+)?$/, `_脱敏.${ext}`) || `redacted_脱敏.${ext}`;
+
+      // ── Tauri: delegate to Rust command (shows native save dialog,
+      //          writes the file, returns the chosen path or throws "cancelled")
+      if (isTauri) {
+        try {
+          const result = await window.__TAURI__.core.invoke('export_file', {
+            doc, entities, format: ext,
+          });
+          return result; // path string
+        } catch (e) {
+          if (e === 'cancelled' || String(e).includes('cancelled')) return null;
+          throw e;
+        }
+      }
+
+      // ── Browser: download ───────────────────────────────────────────────
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = doc.filename.replace(/\.[^.]+$/, '') + '_desensitized.txt';
+      a.download = suggestedName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
+      return null;
+    },
+
+    // ── Open folder in OS file manager ───────────────────────────────────────
+    async openFolder(folderPath) {
+      if (!isTauri) return;
+      try {
+        await window.__TAURI__.core.invoke('open_folder', { path: folderPath });
+      } catch (e) {
+        console.warn('[Bridge] open_folder invoke failed:', e);
+        // Fallback: shell.open
+        try {
+          if (window.__TAURI__?.shell?.open) {
+            await window.__TAURI__.shell.open(folderPath);
+          }
+        } catch (e2) {
+          console.warn('[Bridge] shell.open also failed:', e2);
+        }
+      }
     },
 
     // ── Mapping persistence ──────────────────────────────────────────────────
